@@ -602,7 +602,7 @@ def evaluate(options):
             
             # 007 - Here, it is taking the predictions and sending them.                
             if sampleIndex < 30 or options.debug or options.dataset != '':
-                visualizeBatchPair(options, config, input_pair, detection_pair, indexOffset=sampleIndex, suffix='_' + name + options.modelType, write_ply=options.testingIndex >= 0, write_new_view=options.testingIndex >= 0 and 'occlusion' in options.suffix)
+                visualizeBatchPair(options, config, input_pair, detection_pair, indexOffset=sampleIndex, prefix=image_list[sampleIndex].split('/')[-1].split('.')[0], suffix='_' + name + options.modelType, write_ply=options.testingIndex >= 0, write_new_view=options.testingIndex >= 0 and 'occlusion' in options.suffix)
                 pass
             if sampleIndex >= options.numTestingImages:
                 break
