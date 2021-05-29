@@ -31,15 +31,17 @@ from options import parse_args
 from config import InferenceConfig
 
 
+# 007 - Only concerned with this - As in evaluate.py - when option.method=='f' - method is called
 class PlaneRCNNDetector():
     def __init__(self, options, config, modelType, checkpoint_dir=''):
         self.options = options
         self.config = config
         self.modelType = modelType
-        self.model = MaskRCNN(config)
+        self.model = MaskRCNN(config)  # 007 - Model for planercnn detector
         self.model.cuda()
         self.model.eval()
 
+        # 007 - Q: What is anchorType? - check readme.
         if modelType == 'basic':
             checkpoint_dir = checkpoint_dir if checkpoint_dir != '' else 'checkpoint/pair_' + options.anchorType
         elif modelType == 'pair':
@@ -58,7 +60,7 @@ class PlaneRCNNDetector():
             checkpoint_dir += '_' + options.suffix
             pass
 
-        ## Indicates that the refinement network is trained separately        
+        # Indicates that the refinement network is trained separately
         separate = modelType == 'refine'
 
         if not separate:
@@ -92,8 +94,13 @@ class PlaneRCNNDetector():
         detection_pair = []
         camera = sample[30][0].cuda()
         for indexOffset in [0, ]:
-            images, image_metas, rpn_match, rpn_bbox, gt_class_ids, gt_boxes, gt_masks, gt_parameters, gt_depth, extrinsics, planes, gt_segmentation = sample[indexOffset + 0].cuda(), sample[indexOffset + 1].numpy(), sample[indexOffset + 2].cuda(), sample[indexOffset + 3].cuda(), sample[indexOffset + 4].cuda(), sample[indexOffset + 5].cuda(), sample[indexOffset + 6].cuda(), sample[indexOffset + 7].cuda(), sample[indexOffset + 8].cuda(), sample[indexOffset + 9].cuda(), sample[indexOffset + 10].cuda(), sample[indexOffset + 11].cuda()
-            rpn_class_logits, rpn_pred_bbox, target_class_ids, mrcnn_class_logits, target_deltas, mrcnn_bbox, target_mask, mrcnn_mask, target_parameters, mrcnn_parameters, detections, detection_masks, detection_gt_parameters, detection_gt_masks, rpn_rois, roi_features, roi_indices, depth_np_pred = self.model.predict([images, image_metas, gt_class_ids, gt_boxes, gt_masks, gt_parameters, camera], mode='inference_detection', use_nms=2, use_refinement=True)
+            images, image_metas, rpn_match, rpn_bbox, gt_class_ids, gt_boxes, gt_masks, gt_parameters, gt_depth, extrinsics,\
+            planes, gt_segmentation = sample[indexOffset + 0].cuda(), sample[indexOffset + 1].numpy(), sample[indexOffset + 2].cuda(), sample[indexOffset + 3].cuda(), sample[indexOffset + 4].cuda(), sample[indexOffset + 5].cuda(), sample[indexOffset + 6].cuda(), sample[indexOffset + 7].cuda(), sample[indexOffset + 8].cuda(), sample[indexOffset + 9].cuda(), sample[indexOffset + 10].cuda(), sample[indexOffset + 11].cuda()
+
+            # 007 - calling model.predict()
+            rpn_class_logits, rpn_pred_bbox, target_class_ids, mrcnn_class_logits, target_deltas, mrcnn_bbox, target_mask, \
+            mrcnn_mask, target_parameters, mrcnn_parameters, detections, detection_masks, detection_gt_parameters, \
+            detection_gt_masks, rpn_rois, roi_features, roi_indices, depth_np_pred = self.model.predict([images, image_metas, gt_class_ids, gt_boxes, gt_masks, gt_parameters, camera], mode='inference_detection', use_nms=2, use_refinement=True)
 
             if len(detections) > 0:
                 detections, detection_masks = unmoldDetections(self.config, camera, detections, detection_masks, depth_np_pred, debug=False)
@@ -111,7 +118,7 @@ class PlaneRCNNDetector():
             detection_pair.append({'XYZ': XYZ_pred, 'depth': XYZ_pred[1:2], 'mask': detection_mask, 'detection': detections, 'masks': detection_masks, 'depth_np': depth_np_pred, 'plane_XYZ': plane_XYZ})
             continue
 
-        if ('refine' in self.modelType or 'refine' in self.options.suffix):
+        if 'refine' in self.modelType or 'refine' in self.options.suffix:
             pose = sample[26][0].cuda()
             pose = torch.cat([pose[0:3], pose[3:6] * pose[6]], dim=0)
             pose_gt = torch.cat([pose[0:1], -pose[2:3], pose[1:2], pose[3:4], -pose[5:6], pose[4:5]], dim=0).unsqueeze(0)
@@ -158,7 +165,6 @@ class PlaneRCNNDetector():
                 detection_masks = torch.zeros(detection_dict['masks'].shape).cuda()
                 detection_masks[:, 80:560] = masks
 
-
                 detection_dict['masks'] = detection_masks
                 detection_dict['depth_ori'] = detection_dict['depth'].clone()
                 detection_dict['mask'][:, 80:560] = (masks.max(0, keepdim=True)[0] > (1 - masks.sum(0, keepdim=True))).float()
@@ -183,6 +189,7 @@ class PlaneRCNNDetector():
                 continue
             pass
         return detection_pair
+
 
 class DepthDetector():
     def __init__(self, options, config, modelType, checkpoint_dir=''):
@@ -506,6 +513,7 @@ def evaluate(options):
     specified_suffix = options.suffix
     with torch.no_grad():
         detectors = []
+        # 007 - Each method in options.methods determines the `modelType`
         for method in options.methods:
             if method == 'w':
                 options.suffix = 'pair_' + specified_suffix if specified_suffix != '' else 'pair'
@@ -535,7 +543,7 @@ def evaluate(options):
             elif method == 's':
                 options.suffix = specified_suffix if specified_suffix != '' else ''
                 detectors.append(('refine_single', PlaneRCNNDetector(options, config, modelType='refine_single')))
-            elif method == 'f':
+            elif method == 'f':  # 007 - This is running for inference
                 options.suffix = specified_suffix if specified_suffix != '' else ''
                 detectors.append(('final', PlaneRCNNDetector(options, config, modelType='final')))
                 pass
@@ -552,7 +560,7 @@ def evaluate(options):
     for name, detector in detectors:
         statistics = [[], [], [], []]
         for sampleIndex, sample in enumerate(data_iterator):
-            if options.testingIndex >= 0 and sampleIndex != options.testingIndex:
+            if 0 <= options.testingIndex != sampleIndex:
                 if sampleIndex > options.testingIndex:
                     break
                 continue
@@ -586,14 +594,15 @@ def evaluate(options):
                     evaluateBatchDetection(options, config, input_pair[c], detection_pair[c], statistics=statistics, printInfo=options.debug, evaluate_plane=options.dataset == '')
                     continue
             else:
-                for c in range(len(detection_pair)):
-                    np.save(options.test_dir + '/' + str(sampleIndex % 500) + '_plane_parameters_' + str(c) + '.npy', detection_pair[c]['detection'][:, 6:9])
-                    np.save(options.test_dir + '/' + str(sampleIndex % 500) + '_plane_masks_' + str(c) + '.npy', detection_pair[c]['masks'][:, 80:560])
-                    continue
+                # for c in range(len(detection_pair)):
+                #     np.save(options.test_dir + '/' + str(sampleIndex % 500) + '_plane_parameters_' + str(c) + '.npy', detection_pair[c]['detection'][:, 6:9])
+                #     np.save(options.test_dir + '/' + str(sampleIndex % 500) + '_plane_masks_' + str(c) + '.npy', detection_pair[c]['masks'][:, 80:560])
+                #     continue
                 pass
-                            
+            
+            # 007 - Here, it is taking the predictions and sending them.                
             if sampleIndex < 30 or options.debug or options.dataset != '':
-                visualizeBatchPair(options, config, input_pair, detection_pair, indexOffset=sampleIndex % 500, suffix='_' + name + options.modelType, write_ply=options.testingIndex >= 0, write_new_view=options.testingIndex >= 0 and 'occlusion' in options.suffix)
+                visualizeBatchPair(options, config, input_pair, detection_pair, indexOffset=sampleIndex, suffix='_' + name + options.modelType, write_ply=options.testingIndex >= 0, write_new_view=options.testingIndex >= 0 and 'occlusion' in options.suffix)
                 pass
             if sampleIndex >= options.numTestingImages:
                 break
@@ -614,6 +623,7 @@ def evaluate(options):
             pass
         pass
     return
+
 
 if __name__ == '__main__':
     args = parse_args()
